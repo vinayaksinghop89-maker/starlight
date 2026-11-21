@@ -9,7 +9,9 @@ and a timed role reversal.
 ## Play online
 
 Visit the [AURA 3D Tag Arena](https://vinayaksinghop89-maker.github.io/starlight/aura/).
-The site is deployed to GitHub Pages when changes are pushed to `main`.
+The site is deployed to GitHub Pages when changes are pushed to `main`. Enable
+GitHub Pages with **GitHub Actions** as the source in the repository's
+**Settings → Pages**.
 
 ## Run the 3D simulation
 
