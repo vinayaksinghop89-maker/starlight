@@ -1,0 +1,1280 @@
+---
+const baseUrl = import.meta.env.BASE_URL;
+const homeUrl = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+---
+
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta
+			name="description"
+			content="Play AURA's 3D manual robot tag simulation."
+		/>
+		<meta name="theme-color" content="#080d18" />
+		<title>AURA 3D | Tag Arena</title>
+	</head>
+	<body>
+		<div class="app-shell">
+			<header class="topbar">
+				<a class="brand" href={homeUrl} aria-label="AURA Robotics Lab home">
+					<span class="brand-mark">A</span>
+					<span>
+						<strong>AURA</strong>
+						<small>ROBOTICS LAB</small>
+					</span>
+				</a>
+				<div class="system-status">
+					<span class="status-light"></span>
+					<span>SIMULATION ONLINE</span>
+				</div>
+			</header>
+
+			<main>
+				<section class="intro">
+					<div>
+						<p class="eyebrow">ROBOTICS · TEST ARENA 01</p>
+						<h1>Catch the <span>red target.</span></h1>
+						<p class="intro-copy">
+							AURA gets 60 seconds to tag the target. If time runs out,
+							the roles reverse. Two power orbs appear on opposite sides every
+							30 seconds; each gives a 5-second boost.
+						</p>
+					</div>
+					<div class="action-row">
+						<button class="button button-primary" id="start-game" type="button">
+							Start manual chase
+						</button>
+						<button class="button button-secondary" id="reset-game" type="button">
+							Reset arena
+						</button>
+					</div>
+				</section>
+
+				<section class="game-layout" aria-label="AURA 3D tag game">
+					<div class="scene-card">
+						<div class="scene-toolbar">
+							<div class="phase-group">
+								<span class="eyebrow">MISSION PHASE</span>
+								<strong class="phase-value" id="phase-value">STANDBY</strong>
+							</div>
+							<div class="timer-group">
+								<span class="eyebrow">TIME LEFT</span>
+								<strong class="timer-value" id="timer-value">01:00</strong>
+							</div>
+						</div>
+						<div class="canvas-wrap" id="canvas-wrap">
+							<canvas
+								id="aura-canvas"
+								tabindex="0"
+								aria-label="Interactive 3D arena. Drag to orbit and scroll to zoom."
+							></canvas>
+							<div class="scene-message" id="scene-message">
+								<span class="message-kicker">READY WHEN YOU ARE</span>
+								<strong>Start the tag challenge</strong>
+								<span>Use WASD or the arrow keys to drive AURA.</span>
+							</div>
+							<div class="scene-coordinates" aria-hidden="true">X <span>32</span> · Z <span>22</span></div>
+						</div>
+						<div class="scene-footer">
+							<p id="game-message" aria-live="polite">
+								Press Start, then use WASD or the arrow keys to chase the red object.
+							</p>
+							<span class="powerup-status" id="powerup-status" aria-live="polite">
+								Two power orbs appear in 30s
+							</span>
+							<span class="live-indicator"><i></i> LIVE SIM</span>
+						</div>
+					</div>
+
+					<aside class="side-panel">
+						<section class="panel-card mission-card">
+							<div class="panel-heading">
+								<span class="panel-icon icon-target" aria-hidden="true">◎</span>
+								<div>
+									<p class="eyebrow">ACTIVE MISSION</p>
+									<h2>Manual tag</h2>
+								</div>
+							</div>
+							<p class="panel-copy" id="mission-copy">
+								Drive AURA with WASD or the arrow keys while the red target flees.
+							</p>
+							<div class="mission-command">
+								<span>COMMAND</span>
+								<code>AURA, tag the red object</code>
+							</div>
+						</section>
+
+						<section class="panel-card controls-card">
+							<p class="eyebrow">CONTROLS</p>
+							<div class="control-row">
+								<div class="key-cluster" aria-hidden="true">
+									<kbd>W</kbd>
+									<span><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span>
+								</div>
+								<p><strong>Drive AURA</strong><br />Use WASD or arrow keys to move and tag the target.</p>
+							</div>
+							<div class="control-row">
+								<div class="mouse-icon" aria-hidden="true">↗</div>
+								<p><strong>Orbit camera</strong><br />Drag to look around; scroll to zoom.</p>
+							</div>
+						</section>
+
+						<section class="panel-card legend-card">
+							<p class="eyebrow">ARENA KEY</p>
+							<div><i class="legend-dot aura-dot"></i><span>AURA · player-controlled robot</span></div>
+							<div><i class="legend-dot target-dot"></i><span>Red target · equal speed</span></div>
+							<div><i class="legend-dot powerup-dot"></i><span>Power orbs · 2× speed + jump</span></div>
+							<div><i class="legend-block"></i><span>Obstacle · impassable</span></div>
+						</section>
+					</aside>
+				</section>
+
+				<footer class="page-footer">
+					<span>VIRTUAL ENVIRONMENT · NO HARDWARE REQUIRED</span>
+					<a href={homeUrl}>AURA Robotics Lab</a>
+				</footer>
+			</main>
+		</div>
+
+		<script>
+			import * as THREE from 'three';
+			import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+			import { ARENA, AuraTagGame } from '../scripts/aura-game.js';
+
+			const canvas = document.getElementById('aura-canvas');
+			const canvasWrap = document.getElementById('canvas-wrap');
+			const phaseValue = document.getElementById('phase-value');
+			const timerValue = document.getElementById('timer-value');
+			const gameMessage = document.getElementById('game-message');
+			const powerUpStatus = document.getElementById('powerup-status');
+			const missionCopy = document.getElementById('mission-copy');
+			const sceneMessage = document.getElementById('scene-message');
+			const startButton = document.getElementById('start-game');
+			const resetButton = document.getElementById('reset-game');
+
+			if (
+				!(canvas instanceof HTMLCanvasElement) ||
+				!(canvasWrap instanceof HTMLElement) ||
+				!(phaseValue instanceof HTMLElement) ||
+				!(timerValue instanceof HTMLElement) ||
+				!(gameMessage instanceof HTMLElement) ||
+				!(powerUpStatus instanceof HTMLElement) ||
+				!(missionCopy instanceof HTMLElement) ||
+				!(sceneMessage instanceof HTMLElement) ||
+				!(startButton instanceof HTMLButtonElement) ||
+				!(resetButton instanceof HTMLButtonElement)
+			) {
+				throw new Error('AURA game interface is missing required elements.');
+			}
+
+			const game = new AuraTagGame();
+			const scene = new THREE.Scene();
+			scene.background = new THREE.Color('#080d18');
+			scene.fog = new THREE.Fog('#080d18', 36, 76);
+
+			const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 120);
+			camera.position.set(24, 28, 27);
+			const renderer = new THREE.WebGLRenderer({
+				canvas,
+				antialias: true,
+				powerPreference: 'high-performance',
+			});
+			renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+			renderer.shadowMap.enabled = true;
+			renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+			renderer.outputColorSpace = THREE.SRGBColorSpace;
+			renderer.toneMapping = THREE.ACESFilmicToneMapping;
+			renderer.toneMappingExposure = 1.15;
+
+			const controls = new OrbitControls(camera, renderer.domElement);
+			controls.target.set(0, 0.2, 0);
+			controls.enableDamping = true;
+			controls.dampingFactor = 0.06;
+			controls.enablePan = false;
+			controls.minDistance = 18;
+			controls.maxDistance = 58;
+			controls.maxPolarAngle = Math.PI / 2.05;
+
+			scene.add(new THREE.HemisphereLight(0xc9dcff, 0x182338, 2.1));
+			const keyLight = new THREE.DirectionalLight(0xf1f6ff, 3.2);
+			keyLight.position.set(-11, 22, 14);
+			keyLight.castShadow = true;
+			keyLight.shadow.mapSize.set(2048, 2048);
+			keyLight.shadow.camera.left = -22;
+			keyLight.shadow.camera.right = 22;
+			keyLight.shadow.camera.top = 20;
+			keyLight.shadow.camera.bottom = -20;
+			scene.add(keyLight);
+
+			const floor = new THREE.Mesh(
+				new THREE.PlaneGeometry(ARENA.width, ARENA.height),
+				new THREE.MeshStandardMaterial({
+					color: '#101a2b',
+					metalness: 0.18,
+					roughness: 0.82,
+				}),
+			);
+			floor.rotation.x = -Math.PI / 2;
+			floor.position.y = -0.035;
+			floor.receiveShadow = true;
+			scene.add(floor);
+
+			const gridPositions = [];
+			for (let x = 0; x <= ARENA.width; x += 1) {
+				const worldX = x - ARENA.width / 2;
+				gridPositions.push(worldX, 0.006, -ARENA.height / 2, worldX, 0.006, ARENA.height / 2);
+			}
+			for (let z = 0; z <= ARENA.height; z += 1) {
+				const worldZ = z - ARENA.height / 2;
+				gridPositions.push(-ARENA.width / 2, 0.006, worldZ, ARENA.width / 2, 0.006, worldZ);
+			}
+			const gridGeometry = new THREE.BufferGeometry();
+			gridGeometry.setAttribute(
+				'position',
+				new THREE.Float32BufferAttribute(gridPositions, 3),
+			);
+			scene.add(
+				new THREE.LineSegments(
+					gridGeometry,
+					new THREE.LineBasicMaterial({
+						color: '#273751',
+						transparent: true,
+						opacity: 0.58,
+					}),
+				),
+			);
+
+			const arenaBase = new THREE.Mesh(
+				new THREE.BoxGeometry(ARENA.width + 0.55, 0.45, ARENA.height + 0.55),
+				new THREE.MeshStandardMaterial({
+					color: '#0b1321',
+					metalness: 0.25,
+					roughness: 0.58,
+				}),
+			);
+			arenaBase.position.y = -0.29;
+			arenaBase.receiveShadow = true;
+			scene.add(arenaBase);
+
+			const borderMaterial = new THREE.MeshStandardMaterial({
+				color: '#293951',
+				metalness: 0.3,
+				roughness: 0.45,
+			});
+			function addBorder(width, depth, x, z) {
+				const wall = new THREE.Mesh(
+					new THREE.BoxGeometry(width, 0.42, depth),
+					borderMaterial,
+				);
+				wall.position.set(x, 0.18, z);
+				wall.castShadow = true;
+				wall.receiveShadow = true;
+				scene.add(wall);
+			}
+			addBorder(ARENA.width + 0.2, 0.24, 0, -ARENA.height / 2);
+			addBorder(ARENA.width + 0.2, 0.24, 0, ARENA.height / 2);
+			addBorder(0.24, ARENA.height, -ARENA.width / 2, 0);
+			addBorder(0.24, ARENA.height, ARENA.width / 2, 0);
+
+			const obstacleMaterial = new THREE.MeshStandardMaterial({
+				color: '#40516b',
+				metalness: 0.28,
+				roughness: 0.55,
+			});
+			const edgeMaterial = new THREE.LineBasicMaterial({
+				color: '#7185a3',
+				transparent: true,
+				opacity: 0.72,
+			});
+			for (const [gridX, gridY, width, depth] of ARENA.obstacles) {
+				const geometry = new THREE.BoxGeometry(width, 2.1, depth);
+				const obstacle = new THREE.Mesh(geometry, obstacleMaterial);
+				obstacle.position.set(
+					gridX - ARENA.width / 2 + width / 2,
+					1.05,
+					gridY - ARENA.height / 2 + depth / 2,
+				);
+				obstacle.castShadow = true;
+				obstacle.receiveShadow = true;
+				scene.add(obstacle);
+
+				const edges = new THREE.LineSegments(
+					new THREE.EdgesGeometry(geometry),
+					edgeMaterial,
+				);
+				edges.position.copy(obstacle.position);
+				scene.add(edges);
+			}
+
+			const robotGroup = new THREE.Group();
+			const bodyMaterial = new THREE.MeshStandardMaterial({
+				color: '#238bd2',
+				metalness: 0.48,
+				roughness: 0.32,
+			});
+			const trimMaterial = new THREE.MeshStandardMaterial({
+				color: '#14283e',
+				metalness: 0.55,
+				roughness: 0.38,
+			});
+			const sensorMaterial = new THREE.MeshStandardMaterial({
+				color: '#80e8ff',
+				emissive: '#20b9ed',
+				emissiveIntensity: 1.15,
+				metalness: 0.2,
+				roughness: 0.28,
+			});
+
+			function addRobotPart(geometry, material, position) {
+				const mesh = new THREE.Mesh(geometry, material);
+				mesh.position.set(...position);
+				mesh.castShadow = true;
+				mesh.receiveShadow = true;
+				robotGroup.add(mesh);
+				return mesh;
+			}
+
+			addRobotPart(new THREE.BoxGeometry(0.82, 0.34, 1.02), bodyMaterial, [0, 0.43, 0]);
+			addRobotPart(new THREE.BoxGeometry(0.54, 0.28, 0.54), trimMaterial, [0, 0.72, -0.05]);
+			addRobotPart(new THREE.SphereGeometry(0.16, 20, 14), sensorMaterial, [0, 0.92, 0.02]);
+			addRobotPart(new THREE.BoxGeometry(0.48, 0.1, 0.1), sensorMaterial, [0, 0.58, 0.54]);
+
+			const wheelGeometry = new THREE.CylinderGeometry(0.19, 0.19, 0.14, 18);
+			for (const side of [-1, 1]) {
+				for (const front of [-1, 1]) {
+					const wheel = addRobotPart(wheelGeometry, trimMaterial, [
+						side * 0.45,
+						0.2,
+						front * 0.32,
+					]);
+					wheel.rotation.z = Math.PI / 2;
+				}
+			}
+			scene.add(robotGroup);
+
+			const targetGroup = new THREE.Group();
+			const targetMaterial = new THREE.MeshStandardMaterial({
+				color: '#ff445b',
+				emissive: '#a90d29',
+				emissiveIntensity: 0.8,
+				metalness: 0.16,
+				roughness: 0.3,
+			});
+			const targetBall = new THREE.Mesh(
+				new THREE.SphereGeometry(0.32, 28, 20),
+				targetMaterial,
+			);
+			targetBall.position.y = 0.46;
+			targetBall.castShadow = true;
+			targetBall.receiveShadow = true;
+			targetGroup.add(targetBall);
+			const targetRing = new THREE.Mesh(
+				new THREE.TorusGeometry(0.48, 0.045, 10, 40),
+				new THREE.MeshStandardMaterial({
+					color: '#ff5369',
+					emissive: '#b51b36',
+					emissiveIntensity: 0.75,
+					roughness: 0.35,
+				}),
+			);
+			targetRing.rotation.x = Math.PI / 2;
+			targetRing.position.y = 0.07;
+			targetGroup.add(targetRing);
+			const targetLight = new THREE.PointLight('#ff3e59', 1.7, 5);
+			targetLight.position.y = 1.1;
+			targetGroup.add(targetLight);
+			scene.add(targetGroup);
+
+			function createPowerOrb(color, emissive) {
+				const group = new THREE.Group();
+				const material = new THREE.MeshStandardMaterial({
+					color,
+					emissive,
+					emissiveIntensity: 1.4,
+					metalness: 0.18,
+					roughness: 0.24,
+				});
+				const sphere = new THREE.Mesh(
+					new THREE.SphereGeometry(0.2, 20, 16),
+					material,
+				);
+				sphere.castShadow = true;
+				group.add(sphere);
+				const ring = new THREE.Mesh(
+					new THREE.TorusGeometry(0.31, 0.035, 8, 32),
+					new THREE.MeshStandardMaterial({
+						color,
+						emissive,
+						emissiveIntensity: 1,
+					}),
+				);
+				ring.rotation.x = Math.PI / 2;
+				group.add(ring);
+				const light = new THREE.PointLight(color, 1.5, 4);
+				light.position.y = 0.3;
+				group.add(light);
+				group.visible = false;
+				scene.add(group);
+				return { group, sphere };
+			}
+			const powerOrbGroups = {
+				speed: createPowerOrb('#5de2ff', '#159bc4'),
+				jump: createPowerOrb('#c18aff', '#7734bc'),
+			};
+
+			const pressedKeys = new Set();
+			const movementKeys = new Set([
+				'w',
+				'a',
+				's',
+				'd',
+				'arrowup',
+				'arrowleft',
+				'arrowdown',
+				'arrowright',
+			]);
+			window.addEventListener('keydown', (event) => {
+				const key = event.key.toLowerCase();
+				if (movementKeys.has(key)) {
+					event.preventDefault();
+					pressedKeys.add(key);
+				}
+				if (key === 'r' && game.phase === 'finished') game.reset();
+			});
+			window.addEventListener('keyup', (event) => {
+				pressedKeys.delete(event.key.toLowerCase());
+			});
+			window.addEventListener('blur', () => pressedKeys.clear());
+			canvas.addEventListener('pointerdown', () => canvas.focus());
+
+			startButton.addEventListener('click', () => {
+				if (game.phase === 'finished') game.reset();
+				game.start();
+			});
+			resetButton.addEventListener('click', () => game.reset());
+
+			function resizeRenderer() {
+				const bounds = canvasWrap.getBoundingClientRect();
+				const width = Math.max(1, bounds.width);
+				const height = Math.max(1, bounds.height);
+				renderer.setSize(width, height, false);
+				camera.aspect = width / height;
+				camera.updateProjectionMatrix();
+			}
+			const resizeObserver = new ResizeObserver(resizeRenderer);
+			resizeObserver.observe(canvasWrap);
+			window.addEventListener('resize', resizeRenderer);
+			resizeRenderer();
+
+			function currentInput() {
+				return {
+					x:
+						Number(pressedKeys.has('d') || pressedKeys.has('arrowright')) -
+						Number(pressedKeys.has('a') || pressedKeys.has('arrowleft')),
+					z:
+						Number(pressedKeys.has('s') || pressedKeys.has('arrowdown')) -
+						Number(pressedKeys.has('w') || pressedKeys.has('arrowup')),
+				};
+			}
+
+			function formatTime(seconds) {
+				const wholeSeconds = Math.ceil(seconds);
+				const minutes = Math.floor(wholeSeconds / 60);
+				const remainder = wholeSeconds % 60;
+				return `${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`;
+			}
+
+			const phaseLabels = {
+				idle: 'STANDBY',
+				'aura-chasing': 'AURA CHASING',
+				'red-chasing': 'ESCAPE MODE',
+				finished: null,
+			};
+			const phaseDescriptions = {
+				idle: 'Use WASD or the arrow keys to drive AURA. The red target flees at the same speed.',
+				'aura-chasing': 'You are driving AURA. The red target is fleeing!',
+				'red-chasing': 'The timer expired. Use WASD or the arrow keys to escape!',
+				finished: null,
+			};
+			let lastRobot = { ...game.robot };
+			let lastPhase = '';
+			let lastTimer = '';
+			let lastWinner;
+			function updateInterface() {
+				const timer =
+					game.phase === 'aura-chasing'
+						? formatTime(game.remaining)
+						: game.phase === 'red-chasing'
+							? 'RUN!'
+							: game.phase === 'finished'
+								? '00:00'
+								: '01:00';
+				if (timer !== lastTimer) {
+					timerValue.textContent = timer;
+					lastTimer = timer;
+				}
+				if (game.message !== gameMessage.textContent) {
+					gameMessage.textContent = game.message;
+				}
+				const availableOrbs = game.orbs.map((orb) =>
+					orb.type === 'speed' ? '2× speed' : 'jump',
+				);
+				const activePowerUp = game.activePowerUp
+					? `${game.activePowerUp === 'speed' ? '2× speed' : 'Jump'} · ${Math.ceil(game.powerUpRemaining)}s`
+					: '';
+				powerUpStatus.textContent = activePowerUp
+					? [activePowerUp, ...availableOrbs].join(' · ')
+					: availableOrbs.length > 0
+						? `Touch ${availableOrbs.join(' + ')} orb${availableOrbs.length > 1 ? 's' : ''}`
+						: `Two power orbs appear in ${Math.ceil(Math.max(0, 30 - game.orbSpawnTimer))}s`;
+				if (game.phase !== lastPhase) {
+					phaseValue.textContent =
+						game.phase === 'finished'
+							? game.winner === 'AURA'
+								? 'AURA WINS'
+								: 'RED WINS'
+							: phaseLabels[game.phase];
+					missionCopy.textContent =
+						game.phase === 'finished'
+							? game.winner === 'AURA'
+								? 'AURA tagged the target. Press Play again for another round.'
+								: 'The red target caught AURA. Press Play again to try again.'
+							: phaseDescriptions[game.phase];
+					sceneMessage.hidden =
+						game.phase === 'aura-chasing' || game.phase === 'red-chasing';
+					if (game.phase === 'idle') {
+						sceneMessage.innerHTML =
+							'<span class="message-kicker">READY WHEN YOU ARE</span><strong>Start the tag challenge</strong><span>Use WASD or the arrow keys to drive AURA.</span>';
+					} else if (game.phase === 'finished') {
+						sceneMessage.innerHTML = `<span class="message-kicker">${game.winner === 'AURA' ? 'MISSION COMPLETE' : 'TIME EXPIRED'}</span><strong>${game.winner === 'AURA' ? 'AURA wins.' : 'Red wins.'}</strong><span>Press Play again to restart.</span>`;
+					}
+					startButton.textContent =
+						game.phase === 'finished'
+							? 'Play again'
+							: game.phase === 'idle'
+								? 'Start manual chase'
+								: 'Chase in progress';
+					startButton.disabled =
+						game.phase === 'aura-chasing' || game.phase === 'red-chasing';
+					canvasWrap.dataset.phase = game.phase;
+					lastPhase = game.phase;
+				}
+				if (game.winner !== lastWinner) {
+					if (game.winner === 'AURA') {
+						targetMaterial.color.set('#65e7ad');
+						targetMaterial.emissive.set('#147447');
+						targetRing.material.color.set('#8effc9');
+						targetRing.material.emissive.set('#1a8c5c');
+					} else {
+						targetMaterial.color.set('#ff445b');
+						targetMaterial.emissive.set('#a90d29');
+						targetRing.material.color.set('#ff5369');
+						targetRing.material.emissive.set('#b51b36');
+					}
+					lastWinner = game.winner;
+				}
+			}
+
+			let previousTime = performance.now();
+			function animate(now) {
+				const dt = Math.min((now - previousTime) / 1000, 0.05);
+				previousTime = now;
+				game.update(dt, currentInput());
+
+				robotGroup.position.set(game.robot.x, 0, game.robot.z);
+				const dx = game.robot.x - lastRobot.x;
+				const dz = game.robot.z - lastRobot.z;
+				if (Math.hypot(dx, dz) > 0.001) {
+					robotGroup.rotation.y = Math.atan2(dx, dz);
+				}
+				lastRobot = { ...game.robot };
+				targetGroup.position.set(game.target.x, 0, game.target.z);
+				targetBall.position.y = 0.46 + Math.sin(now * 0.003) * 0.055;
+				targetGroup.rotation.y += dt * 0.8;
+				robotGroup.position.y = game.isJumping
+					? 0.65 + Math.sin(now * 0.018) * 0.12
+					: 0;
+				for (const [type, orbVisual] of Object.entries(powerOrbGroups)) {
+					const orb = game.orbs.find((item) => item.type === type);
+					orbVisual.group.visible = Boolean(orb);
+					if (orb) {
+						orbVisual.group.position.set(orb.position.x, 0.48, orb.position.z);
+						orbVisual.sphere.position.y = Math.sin(now * 0.004) * 0.08;
+						orbVisual.group.rotation.y += dt * 1.5;
+					}
+				}
+				controls.update();
+				updateInterface();
+				renderer.render(scene, camera);
+				requestAnimationFrame(animate);
+			}
+			requestAnimationFrame(animate);
+		</script>
+	</body>
+</html>
+
+<style>
+	:root {
+		color-scheme: dark;
+		font-family:
+			Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+			sans-serif;
+		background: #080d18;
+		color: #e8eef9;
+		font-synthesis: none;
+		text-rendering: optimizeLegibility;
+	}
+
+	* {
+		box-sizing: border-box;
+	}
+
+	body {
+		min-width: 320px;
+		min-height: 100vh;
+		margin: 0;
+		background:
+			radial-gradient(ellipse at 68% -10%, rgba(35, 108, 170, 0.17), transparent 42%),
+			#080d18;
+	}
+
+	button,
+	a {
+		font: inherit;
+	}
+
+	button:focus-visible,
+	a:focus-visible,
+	canvas:focus-visible {
+		outline: 2px solid #78dfff;
+		outline-offset: 3px;
+	}
+
+	.app-shell {
+		width: min(1440px, 100%);
+		margin: 0 auto;
+		padding: 0 42px 28px;
+	}
+
+	.topbar {
+		height: 78px;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		border-bottom: 1px solid rgba(148, 174, 211, 0.13);
+	}
+
+	.brand {
+		display: inline-flex;
+		align-items: center;
+		gap: 11px;
+		color: #f1f6ff;
+		text-decoration: none;
+	}
+
+	.brand-mark {
+		width: 37px;
+		height: 37px;
+		display: grid;
+		place-items: center;
+		border: 1px solid rgba(96, 204, 255, 0.6);
+		border-radius: 11px;
+		background: linear-gradient(145deg, rgba(48, 155, 219, 0.33), rgba(20, 40, 65, 0.55));
+		color: #92e8ff;
+		font-size: 19px;
+		font-weight: 800;
+		box-shadow: 0 0 24px rgba(48, 155, 219, 0.16);
+	}
+
+	.brand strong,
+	.brand small {
+		display: block;
+	}
+
+	.brand strong {
+		font-size: 14px;
+		letter-spacing: 0.16em;
+	}
+
+	.brand small,
+	.system-status,
+	.eyebrow,
+	.scene-coordinates,
+	.mission-command > span,
+	.page-footer {
+		font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+	}
+
+	.brand small {
+		margin-top: 3px;
+		color: #7e91ad;
+		font-size: 8px;
+		letter-spacing: 0.19em;
+	}
+
+	.system-status,
+	.live-indicator {
+		display: inline-flex;
+		align-items: center;
+		gap: 9px;
+		color: #89a0bd;
+		font-size: 10px;
+		letter-spacing: 0.12em;
+	}
+
+	.status-light,
+	.live-indicator i {
+		width: 7px;
+		height: 7px;
+		border-radius: 50%;
+		background: #49e5ac;
+		box-shadow: 0 0 12px rgba(73, 229, 172, 0.85);
+	}
+
+	main {
+		padding-top: 37px;
+	}
+
+	.intro {
+		display: flex;
+		align-items: flex-end;
+		justify-content: space-between;
+		gap: 28px;
+		margin-bottom: 25px;
+	}
+
+	.eyebrow {
+		margin: 0;
+		color: #77a6d2;
+		font-size: 9px;
+		letter-spacing: 0.16em;
+		line-height: 1.5;
+	}
+
+	h1 {
+		margin: 8px 0 8px;
+		color: #f0f5ff;
+		font-size: clamp(30px, 4vw, 46px);
+		font-weight: 650;
+		letter-spacing: -0.055em;
+		line-height: 1;
+	}
+
+	h1 span {
+		color: #ff6577;
+	}
+
+	.intro-copy {
+		max-width: 600px;
+		margin: 0;
+		color: #9cacc1;
+		font-size: 14px;
+		line-height: 1.55;
+	}
+
+	.action-row {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 9px;
+	}
+
+	.button {
+		min-height: 42px;
+		padding: 0 16px;
+		border: 1px solid transparent;
+		border-radius: 9px;
+		cursor: pointer;
+		font-size: 12px;
+		font-weight: 680;
+		transition:
+			transform 140ms ease,
+			background 140ms ease,
+			border-color 140ms ease;
+	}
+
+	.button:hover:not(:disabled) {
+		transform: translateY(-1px);
+	}
+
+	.button:disabled {
+		cursor: default;
+		opacity: 0.55;
+	}
+
+	.button-primary {
+		background: #45b8e9;
+		color: #06121d;
+		box-shadow: 0 7px 22px rgba(42, 158, 211, 0.17);
+	}
+
+	.button-primary:hover:not(:disabled) {
+		background: #70d3f8;
+	}
+
+	.button-secondary {
+		border-color: rgba(136, 162, 199, 0.25);
+		background: rgba(24, 36, 54, 0.7);
+		color: #c4d2e5;
+	}
+
+	.button-secondary:hover {
+		border-color: rgba(136, 190, 231, 0.55);
+		background: rgba(33, 51, 74, 0.8);
+	}
+
+	.game-layout {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) 294px;
+		gap: 16px;
+		align-items: stretch;
+	}
+
+	.scene-card,
+	.panel-card {
+		border: 1px solid rgba(133, 161, 197, 0.16);
+		border-radius: 14px;
+		background: rgba(14, 22, 35, 0.91);
+		box-shadow: 0 16px 55px rgba(0, 0, 0, 0.18);
+	}
+
+	.scene-card {
+		min-width: 0;
+		overflow: hidden;
+	}
+
+	.scene-toolbar {
+		min-height: 66px;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 0 19px;
+		border-bottom: 1px solid rgba(133, 161, 197, 0.12);
+		background: rgba(17, 27, 42, 0.92);
+	}
+
+	.phase-group,
+	.timer-group {
+		display: flex;
+		flex-direction: column;
+		gap: 3px;
+	}
+
+	.phase-value {
+		color: #8de6ff;
+		font-size: 12px;
+		letter-spacing: 0.08em;
+	}
+
+	.timer-group {
+		align-items: flex-end;
+	}
+
+	.timer-value {
+		color: #eff6ff;
+		font-variant-numeric: tabular-nums;
+		font-size: 21px;
+		font-weight: 650;
+		letter-spacing: 0.05em;
+	}
+
+	.canvas-wrap {
+		position: relative;
+		height: clamp(390px, 54vw, 610px);
+		overflow: hidden;
+		background:
+			radial-gradient(ellipse at 50% 50%, rgba(24, 67, 109, 0.17), transparent 65%),
+			#080d18;
+	}
+
+	#aura-canvas {
+		width: 100%;
+		height: 100%;
+		display: block;
+		cursor: grab;
+	}
+
+	#aura-canvas:active {
+		cursor: grabbing;
+	}
+
+	.scene-message {
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		display: flex;
+		min-width: 230px;
+		flex-direction: column;
+		align-items: center;
+		gap: 8px;
+		padding: 19px 24px;
+		transform: translate(-50%, -50%);
+		border: 1px solid rgba(115, 177, 220, 0.25);
+		border-radius: 12px;
+		background: rgba(7, 14, 25, 0.82);
+		text-align: center;
+		backdrop-filter: blur(12px);
+		pointer-events: none;
+	}
+
+	.scene-message[hidden] {
+		display: none;
+	}
+
+	.message-kicker {
+		color: #70badd;
+		font-family: "SFMono-Regular", Consolas, monospace;
+		font-size: 9px;
+		letter-spacing: 0.16em;
+	}
+
+	.scene-message strong {
+		color: #edf5ff;
+		font-size: 15px;
+	}
+
+	.scene-message > span:last-child {
+		color: #9cacc1;
+		font-size: 11px;
+	}
+
+	.scene-coordinates {
+		position: absolute;
+		right: 15px;
+		bottom: 13px;
+		padding: 7px 9px;
+		border: 1px solid rgba(126, 158, 198, 0.16);
+		border-radius: 6px;
+		background: rgba(7, 13, 23, 0.68);
+		color: #70849e;
+		font-size: 9px;
+		letter-spacing: 0.06em;
+		pointer-events: none;
+	}
+
+	.scene-coordinates span {
+		color: #a4bad2;
+	}
+
+	.scene-footer {
+		min-height: 54px;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+		padding: 0 18px;
+		border-top: 1px solid rgba(133, 161, 197, 0.12);
+	}
+
+	.scene-footer p {
+		margin: 0;
+		color: #b7c5d8;
+		font-size: 12px;
+		line-height: 1.4;
+	}
+
+	.powerup-status {
+		color: #91dff4;
+		font-size: 10px;
+		white-space: nowrap;
+	}
+
+	.live-indicator {
+		flex: 0 0 auto;
+		color: #7b8fa8;
+		font-size: 8px;
+	}
+
+	.live-indicator i {
+		width: 6px;
+		height: 6px;
+	}
+
+	.side-panel {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+	}
+
+	.panel-card {
+		padding: 17px;
+	}
+
+	.mission-card {
+		padding-top: 19px;
+	}
+
+	.panel-heading {
+		display: flex;
+		align-items: center;
+		gap: 11px;
+	}
+
+	.panel-icon {
+		width: 35px;
+		height: 35px;
+		display: grid;
+		place-items: center;
+		border: 1px solid rgba(71, 183, 226, 0.23);
+		border-radius: 9px;
+		background: rgba(29, 100, 145, 0.2);
+		color: #74d9f6;
+		font-size: 22px;
+	}
+
+	h2 {
+		margin: 2px 0 0;
+		color: #e4edf9;
+		font-size: 14px;
+		font-weight: 620;
+	}
+
+	.panel-copy {
+		margin: 14px 0 16px;
+		color: #9eafc4;
+		font-size: 12px;
+		line-height: 1.6;
+	}
+
+	.mission-command {
+		display: flex;
+		flex-direction: column;
+		gap: 7px;
+		padding: 10px 11px;
+		border: 1px solid rgba(121, 152, 191, 0.15);
+		border-radius: 8px;
+		background: rgba(5, 11, 20, 0.52);
+	}
+
+	.mission-command > span {
+		color: #7188a4;
+		font-size: 8px;
+		letter-spacing: 0.14em;
+	}
+
+	.mission-command code {
+		color: #a9eaff;
+		font-family: "SFMono-Regular", Consolas, monospace;
+		font-size: 10px;
+	}
+
+	.controls-card > .eyebrow,
+	.legend-card > .eyebrow {
+		margin-bottom: 13px;
+	}
+
+	.control-row {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+	}
+
+	.control-row + .control-row {
+		margin-top: 13px;
+	}
+
+	.control-row p {
+		margin: 0;
+		color: #94a6bc;
+		font-size: 10px;
+		line-height: 1.5;
+	}
+
+	.control-row strong {
+		color: #d7e3f2;
+		font-size: 11px;
+		font-weight: 600;
+	}
+
+	.key-cluster {
+		width: 48px;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 3px;
+		flex: 0 0 auto;
+	}
+
+	.key-cluster span {
+		display: flex;
+		gap: 3px;
+	}
+
+	kbd {
+		min-width: 15px;
+		height: 15px;
+		display: inline-grid;
+		place-items: center;
+		border: 1px solid rgba(140, 171, 209, 0.28);
+		border-radius: 3px;
+		background: #172437;
+		color: #c4d6eb;
+		font-family: "SFMono-Regular", Consolas, monospace;
+		font-size: 8px;
+	}
+
+	.mouse-icon {
+		width: 48px;
+		height: 31px;
+		display: grid;
+		place-items: center;
+		flex: 0 0 auto;
+		color: #91bbdb;
+		font-size: 23px;
+	}
+
+	.legend-card > div {
+		display: flex;
+		align-items: center;
+		gap: 9px;
+		color: #a3b2c5;
+		font-size: 10px;
+	}
+
+	.legend-card > div + div {
+		margin-top: 10px;
+	}
+
+	.legend-dot {
+		width: 8px;
+		height: 8px;
+		display: inline-block;
+		border-radius: 50%;
+	}
+
+	.aura-dot {
+		background: #47c9ff;
+		box-shadow: 0 0 9px rgba(71, 201, 255, 0.7);
+	}
+
+	.target-dot {
+		background: #ff4d64;
+		box-shadow: 0 0 9px rgba(255, 77, 100, 0.7);
+	}
+
+	.powerup-dot {
+		background: #8deaff;
+		box-shadow: 0 0 9px rgba(93, 226, 255, 0.7);
+	}
+
+	.legend-block {
+		width: 10px;
+		height: 8px;
+		display: inline-block;
+		border: 1px solid #8195b0;
+		background: #40516b;
+	}
+
+	.page-footer {
+		display: flex;
+		justify-content: space-between;
+		gap: 14px;
+		padding: 19px 2px 0;
+		color: #596c84;
+		font-size: 8px;
+		letter-spacing: 0.11em;
+	}
+
+	.page-footer a {
+		color: #8da1bc;
+		text-decoration: none;
+	}
+
+	.page-footer a:hover {
+		color: #b5dfff;
+	}
+
+	@media (max-width: 980px) {
+		.app-shell {
+			padding-right: 24px;
+			padding-left: 24px;
+		}
+
+		.game-layout {
+			grid-template-columns: minmax(0, 1fr) 255px;
+		}
+
+		.panel-card {
+			padding: 14px;
+		}
+	}
+
+	@media (max-width: 760px) {
+		.app-shell {
+			padding: 0 15px 20px;
+		}
+
+		.topbar {
+			height: 66px;
+		}
+
+		.system-status {
+			font-size: 8px;
+		}
+
+		main {
+			padding-top: 28px;
+		}
+
+		.intro {
+			align-items: flex-start;
+			flex-direction: column;
+			gap: 17px;
+		}
+
+		.action-row {
+			width: 100%;
+		}
+
+		.action-row .button {
+			flex: 1;
+			padding: 0 10px;
+		}
+
+		.game-layout {
+			grid-template-columns: 1fr;
+		}
+
+		.canvas-wrap {
+			height: min(64vh, 500px);
+			min-height: 350px;
+		}
+
+		.side-panel {
+			display: grid;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+
+		.mission-card {
+			grid-column: 1 / -1;
+		}
+	}
+
+	@media (max-width: 460px) {
+		.side-panel {
+			grid-template-columns: 1fr;
+		}
+
+		.mission-card {
+			grid-column: auto;
+		}
+
+		.scene-toolbar {
+			padding: 0 13px;
+		}
+
+		.scene-footer {
+			align-items: flex-start;
+			flex-direction: column;
+			justify-content: center;
+			gap: 5px;
+			padding: 10px 13px;
+		}
+
+		.page-footer {
+			align-items: flex-start;
+			flex-direction: column;
+		}
+	}
+</style>

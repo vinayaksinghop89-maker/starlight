@@ -1,58 +1,50 @@
-# Starlight Starter Kit: Basics
+# AURA Robotics Lab
 
-[![Built with Starlight](https://astro.badg.es/v2/built-with-starlight/tiny.svg)](https://starlight.astro.build)
+AURA is a browser-based 3D robot-tag simulation built with Astro and Three.js.
+It demonstrates grid-based A* navigation, obstacle avoidance, a fleeing target,
+and a timed role reversal.
 
-```
-npm create astro@latest -- --template starlight
-```
+## Play online
 
-<!-- ASTRO:REMOVE:START -->
+Visit the [AURA 3D Tag Arena](https://vinayaksinghop89-maker.github.io/starlight/aura/).
+The site is deployed to GitHub Pages when changes are pushed to `main`.
 
-[![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/withastro/starlight/tree/main/examples/basics)
-[![Open with CodeSandbox](https://assets.codesandbox.io/github/button-edit-lime.svg)](https://codesandbox.io/p/sandbox/github/withastro/starlight/tree/main/examples/basics)
-[![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/withastro/starlight&create_from_path=examples/basics)
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fwithastro%2Fstarlight%2Ftree%2Fmain%2Fexamples%2Fbasics&project-name=my-starlight-docs&repository-name=my-starlight-docs)
+## Run the 3D simulation
 
-<!-- ASTRO:REMOVE:END -->
+Install Node.js, then run these commands from the project root:
 
-> 🧑‍🚀 **Seasoned astronaut?** Delete this file. Have fun!
-
-## 🚀 Project Structure
-
-Inside of your Astro + Starlight project, you'll see the following folders and files:
-
-```
-.
-├── public/
-├── src/
-│   ├── assets/
-│   ├── content/
-│   │   └── docs/
-│   └── content.config.ts
-├── astro.config.mjs
-├── package.json
-└── tsconfig.json
+```sh
+npm install
+npm run dev
 ```
 
-Starlight looks for `.md` or `.mdx` files in the `src/content/docs/` directory. Each file is exposed as a route based on its file name.
+Open the local address printed by Astro and select **Play the 3D tag arena**, or
+go directly to `/aura/`.
 
-Images can be added to `src/assets/` and embedded in Markdown with a relative link.
+## How to play
 
-Static assets, like favicons, can be placed in the `public/` directory.
+1. Select **Start 60-second chase**. AURA automatically plans a route and chases
+   the red target while it tries to escape.
+2. If AURA hasn't tagged it after 60 seconds, use **WASD** or the **arrow keys**
+   to steer AURA away from the target.
+3. Drag in the arena to orbit the camera, scroll to zoom, and select **Reset
+   arena** at any time to start over.
 
-## 🧞 Commands
+Two power orbs spawn on opposite sides of the arena every 30 seconds. Touch
+the speed orb for double speed or the jump orb to leap over the opponent; each
+effect lasts 5 seconds.
 
-All commands are run from the root of the project, from a terminal:
+The simulation runs entirely in the browser and does not control physical
+hardware.
 
-| Command                   | Action                                           |
-| :------------------------ | :----------------------------------------------- |
-| `npm install`             | Installs dependencies                            |
-| `npm run dev`             | Starts local dev server at `localhost:4321`      |
-| `npm run build`           | Build your production site to `./dist/`          |
-| `npm run preview`         | Preview your build locally, before deploying     |
-| `npm run astro ...`       | Run CLI commands like `astro add`, `astro check` |
-| `npm run astro -- --help` | Get help using the Astro CLI                     |
+## Desktop prototype
 
-## 👀 Want to learn more?
+The original Pygame simulator is in [`aura/`](./aura/). See
+[`aura/README.md`](./aura/README.md) for its Windows setup and controls.
 
-Check out [Starlight’s docs](https://starlight.astro.build/), read [the Astro documentation](https://docs.astro.build), or jump into the [Astro Discord server](https://astro.build/chat).
+## Development
+
+```sh
+npm test
+npm run build
+```
