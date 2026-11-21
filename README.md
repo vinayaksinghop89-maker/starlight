@@ -1,5 +1,7 @@
 # AURA Robotics Lab
 
+[![Deploy to GitHub Pages](https://github.com/vinayaksinghop89-maker/starlight/actions/workflows/deploy.yml/badge.svg)](https://github.com/vinayaksinghop89-maker/starlight/actions/workflows/deploy.yml)
+
 AURA is a browser-based 3D robot-tag simulation built with Astro and Three.js.
 It demonstrates grid-based A* navigation, obstacle avoidance, a fleeing target,
 and a timed role reversal.
